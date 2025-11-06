@@ -172,7 +172,8 @@ def read_excel_range_with_metadata(
     sheet_name: str,
     start_cell: str = "A1",
     end_cell: Optional[str] = None,
-    include_validation: bool = True
+    include_validation: bool = True,
+    evaluate_formulas: bool = False
 ) -> Dict[str, Any]:
     """Read data from Excel range with cell metadata including validation rules.
     
@@ -182,17 +183,34 @@ def read_excel_range_with_metadata(
         start_cell: Starting cell address
         end_cell: Ending cell address (optional)
         include_validation: Whether to include validation metadata
+        evaluate_formulas: If True, attempt to read calculated values for formula cells
+                           by loading the workbook with data_only=True (relies on
+                           cached calculated values stored in the file).
         
     Returns:
         Dictionary containing structured cell data with metadata
     """
     try:
+        # Workbook used for metadata (formulas, validation, etc.)
         wb = load_workbook(filepath, read_only=False)
+        wb_values = None
+        ws_values = None
+        if evaluate_formulas:
+            # Open second workbook with data_only=True to obtain cached formula results.
+            # Note: openpyxl does not calculate formulas; this relies on stored cached values.
+            wb_values = load_workbook(filepath, read_only=False, data_only=True)
         
         if sheet_name not in wb.sheetnames:
             raise DataError(f"Sheet '{sheet_name}' not found")
             
         ws = wb[sheet_name]
+        if evaluate_formulas:
+            if sheet_name not in wb_values.sheetnames:
+                # Close the second workbook if mismatch and fall back to metadata workbook
+                wb_values.close()
+                wb_values = None
+            else:
+                ws_values = wb_values[sheet_name]
 
         # Parse start cell
         if ':' in start_cell:
@@ -251,10 +269,17 @@ def read_excel_range_with_metadata(
             for col in range(start_col, end_col + 1):
                 cell = ws.cell(row=row, column=col)
                 cell_address = f"{get_column_letter(col)}{row}"
-                
+
+                # If evaluate_formulas=True and we successfully opened a data_only workbook,
+                # prefer the cached calculated value from that workbook.
+                if evaluate_formulas and ws_values is not None:
+                    value = ws_values.cell(row=row, column=col).value
+                else:
+                    value = cell.value
+
                 cell_data = {
                     "address": cell_address,
-                    "value": cell.value,
+                    "value": value,
                     "row": row,
                     "column": col
                 }
@@ -270,6 +295,8 @@ def read_excel_range_with_metadata(
                 range_data["cells"].append(cell_data)
 
         wb.close()
+        if wb_values is not None:
+            wb_values.close()
         return range_data
         
     except DataError as e:

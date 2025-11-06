@@ -198,7 +198,8 @@ def read_data_from_excel(
     sheet_name: str,
     start_cell: str = "A1",
     end_cell: Optional[str] = None,
-    preview_only: bool = False
+    preview_only: bool = False,
+    evaluate_formulas: bool = False
 ) -> str:
     """
     Read data from Excel worksheet with cell metadata including validation rules.
@@ -218,10 +219,12 @@ def read_data_from_excel(
         full_path = get_excel_path(filepath)
         from excel_mcp.data import read_excel_range_with_metadata
         result = read_excel_range_with_metadata(
-            full_path, 
-            sheet_name, 
-            start_cell, 
-            end_cell
+            full_path,
+            sheet_name,
+            start_cell,
+            end_cell,
+            include_validation=True,
+            evaluate_formulas=evaluate_formulas
         )
         if not result or not result.get("cells"):
             return "No data found in specified range"
