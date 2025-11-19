@@ -8,6 +8,8 @@ RUN apt-get update && apt-get install -y build-essential gcc && rm -rf /var/lib/
 
 # Copy minimal project files then install package
 COPY pyproject.toml /app/
+COPY README.md /app/
+COPY LICENSE /app/
 COPY src /app/src
 
 RUN pip install --no-cache-dir .
