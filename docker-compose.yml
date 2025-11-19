@@ -1,0 +1,25 @@
+version: "3.8"
+services:
+  excel_mcp:
+    build: .
+    working_dir: /app
+    ports:
+      - "8007:8007"
+    environment:
+      EXCEL_FILES_PATH: "."
+      FASTMCP_PORT: "8007"
+    volumes:
+      - ./:/app:delegated
+    command: ["python", "-m", "excel_mcp", "streamable-http"]
+
+  samba:
+    image: dperson/samba:latest
+    restart: unless-stopped
+    ports:
+      - "137:137/udp"
+      - "138:138/udp"
+      - "139:139"
+      - "445:445"
+    volumes:
+      - ./excel_files:/shared:ro
+    command: '-s "excel_files;/shared;yes;no;guest"'
