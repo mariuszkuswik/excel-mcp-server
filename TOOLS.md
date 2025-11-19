@@ -70,7 +70,8 @@ read_data_from_excel(
     sheet_name: str,
     start_cell: str = "A1",
     end_cell: str = None,
-    preview_only: bool = False
+    preview_only: bool = False,
+    evaluate_formulas: bool = False
 ) -> str
 ```
 
@@ -79,6 +80,7 @@ read_data_from_excel(
 - `start_cell`: Starting cell (default: "A1")
 - `end_cell`: Optional ending cell
 - `preview_only`: Whether to return only a preview
+- `evaluate_formulas`: When True, returns computed results for formula cells using xlcalculator (falls back to cached values)
 - Returns: String representation of data
 
 ## Formatting Operations

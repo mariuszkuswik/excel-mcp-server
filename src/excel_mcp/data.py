@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 import logging
 
 from openpyxl import load_workbook
@@ -10,7 +10,74 @@ from .exceptions import DataError
 from .cell_utils import parse_cell_range
 from .cell_validation import get_data_validation_for_cell
 
+try:
+    from xlcalculator import ModelCompiler, Evaluator
+except ImportError:  # pragma: no cover - optional dependency
+    ModelCompiler = None  # type: ignore[assignment]
+    Evaluator = None  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
+
+def _build_formula_evaluator(filepath: Path | str) -> Optional[Evaluator]:
+    """Create an xlcalculator evaluator for the supplied workbook."""
+    if ModelCompiler is None or Evaluator is None:
+        logger.debug("xlcalculator not installed; formula evaluation disabled")
+        return None
+    resolved_path = Path(filepath).resolve(strict=False)
+    try:
+        compiler = ModelCompiler()
+        model = compiler.read_and_parse_archive(str(resolved_path))
+        return Evaluator(model)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning(
+            "Failed to initialize xlcalculator evaluator for '%s': %s",
+            filepath,
+            exc,
+        )
+        return None
+
+def _evaluate_formula_cell(
+    evaluator: Optional[Evaluator],
+    sheet_name: str,
+    cell_address: str,
+    row: int,
+    column: int,
+    fallback_loader: Optional[Callable[[int, int], Any]],
+    default_value: Any,
+) -> Any:
+    """Evaluate a single formula cell and fall back to provided loader on failure."""
+    computed_value: Any = None
+    if evaluator is not None:
+        normalized_sheet = sheet_name.replace("'", "''")
+        tokens = [
+            f"{sheet_name}!{cell_address}",
+            f"'{normalized_sheet}'!{cell_address}",
+        ]
+        for token in tokens:
+            try:
+                computed_value = evaluator.evaluate(token)
+                if computed_value is not None:
+                    return computed_value
+            except KeyError:
+                # Try the next token variation
+                continue
+            except Exception as exc:  # pragma: no cover - library error handling
+                logger.warning(
+                    "Failed to evaluate formula in %s!%s via xlcalculator (%s): %s",
+                    sheet_name,
+                    cell_address,
+                    token,
+                    exc,
+                )
+                break
+    if fallback_loader is not None:
+        try:
+            cached_value = fallback_loader(row, column)
+            if cached_value is not None:
+                return cached_value
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            logger.debug("Formula fallback loader failed for %s!%s: %s", sheet_name, cell_address, exc)
+    return default_value
 
 def read_excel_range(
     filepath: Path | str,
@@ -183,34 +250,58 @@ def read_excel_range_with_metadata(
         start_cell: Starting cell address
         end_cell: Ending cell address (optional)
         include_validation: Whether to include validation metadata
-        evaluate_formulas: If True, attempt to read calculated values for formula cells
-                           by loading the workbook with data_only=True (relies on
-                           cached calculated values stored in the file).
+        evaluate_formulas: If True, evaluate formulas via xlcalculator (falls back to
+                           cached values when available).
         
     Returns:
         Dictionary containing structured cell data with metadata
     """
     try:
-        # Workbook used for metadata (formulas, validation, etc.)
-        wb = load_workbook(filepath, read_only=False)
+        file_path = Path(filepath).resolve(strict=False)
+        wb = load_workbook(file_path, read_only=False)
+        formula_evaluator: Optional[Evaluator] = None
         wb_values = None
         ws_values = None
+        fallback_loader: Optional[Callable[[int, int], Any]] = None
+        fallback_loader_failed = False
+
         if evaluate_formulas:
-            # Open second workbook with data_only=True to obtain cached formula results.
-            # Note: openpyxl does not calculate formulas; this relies on stored cached values.
-            wb_values = load_workbook(filepath, read_only=False, data_only=True)
-        
+            formula_evaluator = _build_formula_evaluator(file_path)
+
+            def _get_cached_value(row: int, col: int) -> Any:
+                nonlocal wb_values, ws_values, fallback_loader_failed
+                if fallback_loader_failed:
+                    return None
+                if wb_values is None:
+                    try:
+                        wb_values = load_workbook(file_path, read_only=False, data_only=True)
+                    except Exception as exc:  # pragma: no cover - IO issues
+                        logger.warning(
+                            "Unable to open workbook in data_only mode for fallback: %s",
+                            exc,
+                        )
+                        fallback_loader_failed = True
+                        return None
+                    if sheet_name not in wb_values.sheetnames:
+                        logger.warning(
+                            "Sheet '%s' not found in data_only workbook during fallback",
+                            sheet_name,
+                        )
+                        wb_values.close()
+                        wb_values = None
+                        fallback_loader_failed = True
+                        return None
+                    ws_values = wb_values[sheet_name]
+                if ws_values is None:
+                    return None
+                return ws_values.cell(row=row, column=col).value
+
+            fallback_loader = _get_cached_value
+
         if sheet_name not in wb.sheetnames:
             raise DataError(f"Sheet '{sheet_name}' not found")
             
         ws = wb[sheet_name]
-        if evaluate_formulas:
-            if sheet_name not in wb_values.sheetnames:
-                # Close the second workbook if mismatch and fall back to metadata workbook
-                wb_values.close()
-                wb_values = None
-            else:
-                ws_values = wb_values[sheet_name]
 
         # Parse start cell
         if ':' in start_cell:
@@ -270,12 +361,31 @@ def read_excel_range_with_metadata(
                 cell = ws.cell(row=row, column=col)
                 cell_address = f"{get_column_letter(col)}{row}"
 
-                # If evaluate_formulas=True and we successfully opened a data_only workbook,
-                # prefer the cached calculated value from that workbook.
-                if evaluate_formulas and ws_values is not None:
-                    value = ws_values.cell(row=row, column=col).value
-                else:
-                    value = cell.value
+                value = cell.value
+                formula_text: Optional[str] = None
+
+                if cell.data_type == "f":
+                    # openpyxl retains the formula string in cell.value for formula cells
+                    if isinstance(cell.value, str):
+                        formula_text = cell.value
+                elif isinstance(cell.value, str) and cell.value.startswith("="):
+                    # Defensive: some workbooks may expose formula as plain string even if data_type isn't 'f'
+                    formula_text = cell.value
+
+                if evaluate_formulas and formula_text is not None:
+                    value = _evaluate_formula_cell(
+                        evaluator=formula_evaluator,
+                        sheet_name=sheet_name,
+                        cell_address=cell_address,
+                        row=row,
+                        column=col,
+                        fallback_loader=fallback_loader,
+                        default_value=formula_text,
+                    )
+                elif evaluate_formulas and formula_evaluator is None and fallback_loader is not None:
+                    fallback_value = fallback_loader(row, col)
+                    if fallback_value is not None:
+                        value = fallback_value
 
                 cell_data = {
                     "address": cell_address,

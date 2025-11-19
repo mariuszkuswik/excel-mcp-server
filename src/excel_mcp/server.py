@@ -1,5 +1,6 @@
 import logging
 import os
+from pathlib import Path
 from typing import Any, List, Dict, Optional
 
 from mcp.server.fastmcp import FastMCP
@@ -82,15 +83,32 @@ def get_excel_path(filename: str) -> str:
     """
     # If filename is already an absolute path, return it
     if os.path.isabs(filename):
-        return filename
+        return os.path.abspath(filename)
 
     # Check if in SSE mode (EXCEL_FILES_PATH is not None)
     if EXCEL_FILES_PATH is None:
         # Must use absolute path
         raise ValueError(f"Invalid filename: {filename}, must be an absolute path when not in SSE mode")
 
-    # In SSE mode, if it's a relative path, resolve it based on EXCEL_FILES_PATH
-    return os.path.join(EXCEL_FILES_PATH, filename)
+    base_path = Path(EXCEL_FILES_PATH).resolve(strict=False)
+    relative_path = Path(filename)
+
+    # Normalize leading current-directory references
+    while relative_path.parts and relative_path.parts[0] in (".", ""):
+        relative_path = Path(*relative_path.parts[1:]) if len(relative_path.parts) > 1 else Path()
+
+    # If the provided path already begins with the base directory name, strip it to avoid duplication
+    if relative_path.parts and relative_path.parts[0] == base_path.name:
+        relative_path = Path(*relative_path.parts[1:]) if len(relative_path.parts) > 1 else Path()
+
+    full_path = (base_path / relative_path).resolve(strict=False)
+
+    try:
+        full_path.relative_to(base_path)
+    except ValueError:
+        raise ValueError(f"Invalid filename: {filename}, must be within {base_path}")
+
+    return str(full_path)
 
 @mcp.tool()
 def apply_formula(
@@ -210,6 +228,7 @@ def read_data_from_excel(
         start_cell: Starting cell (default A1)
         end_cell: Ending cell (optional, auto-expands if not provided)
         preview_only: Whether to return preview only
+        evaluate_formulas: If True, compute and return formula results instead of the raw formula text
     
     Returns:  
     JSON string containing structured cell data with validation metadata.
