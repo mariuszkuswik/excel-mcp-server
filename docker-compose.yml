@@ -22,4 +22,4 @@ services:
       - "445:445"
     volumes:
       - ./excel_files:/shared:rw
-    command: '-s "excel_files;/shared;yes;yes;yes"'
+    command: '-p -s "excel_files;/shared;yes;no;yes"'
