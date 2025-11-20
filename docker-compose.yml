@@ -22,5 +22,4 @@ services:
       - "445:445"
     volumes:
       - ./excel_files:/shared:rw
-      - ./samba/smb.conf:/etc/samba/smb.conf:ro
-    command: ["smbd","-F","-S","-s","/etc/samba/smb.conf"]
+    command: '-s "excel_files;/shared;yes;yes;yes"'
