@@ -1,0 +1,39 @@
+meta {
+  name: SUM
+  type: http
+  seq: 9
+}
+
+post {
+  url: http://192.168.1.54:8017/mcp
+  body: json
+  auth: inherit
+}
+
+headers {
+  accept: application/json,text/event-stream
+  content-type: application/json
+  mcp-session-id: 344c6c9b74814f3ab82fe65ecb6eaa27
+}
+
+body:json {
+  {
+    "jsonrpc": "2.0",
+    "id": 4,
+    "method": "tools/call",
+    "params": {
+      "name": "apply_formula",
+      "arguments": {
+        "filepath": "/excel_files/input3.xlsx",
+        "sheet_name": "Sheet1",
+        "cell": "B2",
+        "formula": "=SUM(A1:A2)"
+      }
+    }
+  }
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}

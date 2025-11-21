@@ -1,0 +1,40 @@
+meta {
+  name: Read from Excel
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseURL}}/mcp
+  body: json
+  auth: inherit
+}
+
+headers {
+  accept: application/json,text/event-stream
+  content-type: application/json
+  mcp-session-id: {{mcp-session-id}}
+}
+
+body:json {
+  {
+    "jsonrpc": "2.0",
+    "id": 3,
+    "method": "tools/call",
+    "params": {
+      "name": "read_data_from_excel",
+      "arguments": {
+        "filepath": "./excel_files/input.xlsx",
+        "sheet_name": "Arkusz1",
+        "start_cell": "B2",
+        "end_cell": "B2",
+        "evaluate_formulas": true
+      }
+    }
+  }
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}

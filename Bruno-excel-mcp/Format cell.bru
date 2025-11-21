@@ -1,0 +1,39 @@
+meta {
+  name: Format cell
+  type: http
+  seq: 7
+}
+
+post {
+  url: http://192.168.1.54:8017/mcp
+  body: json
+  auth: inherit
+}
+
+headers {
+  accept: application/json,text/event-stream
+  content-type: application/json
+  mcp-session-id: 79a6fe7d1b47490bb9bcc03d54a04aa7
+}
+
+body:json {
+  {
+    "jsonrpc": "2.0",
+    "id": 3,
+    "method": "tools/call",
+    "params": {
+      "name": "format_range",
+      "arguments": {
+        "filepath": "/excel_files/input3.xlsx",
+        "sheet_name": "Sheet1",
+        "start_cell": "B1",
+        "number_format": "0"
+      }
+    }
+  }
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}

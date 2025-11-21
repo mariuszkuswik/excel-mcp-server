@@ -1,0 +1,40 @@
+meta {
+  name: Read cell
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseURL}}/mcp
+  body: json
+  auth: inherit
+}
+
+headers {
+  accept: application/json,text/event-stream
+  content-type: application/json
+  mcp-session-id: {{mcp-session-id}}
+}
+
+body:json {
+  {
+    "jsonrpc": "2.0",
+    "id": 3,
+    "method": "tools/call",
+    "params": {
+      "name": "read_data_from_excel",
+      "arguments": {
+        "filepath": "excel_files/input3.xlsx",
+        "sheet_name": "Arkusz1",
+        "start_cell": "B1",
+        "end_cell": "B1",
+        "preview_only": true
+      }
+    }
+  }
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}

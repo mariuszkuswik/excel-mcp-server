@@ -1,0 +1,39 @@
+meta {
+  name: Apply formula
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseURL}}/mcp
+  body: json
+  auth: inherit
+}
+
+headers {
+  accept: application/json,text/event-stream
+  content-type: application/json
+  mcp-session-id: {{mcp-session-id}}
+}
+
+body:json {
+  {
+    "jsonrpc": "2.0",
+    "id": 3,
+    "method": "tools/call",
+    "params": {
+      "name": "apply_formula",
+      "arguments": {
+        "filepath": "./excel_files/input.xlsx",
+        "sheet_name": "Arkusz1",
+        "cell": "B2",
+        "formula": "=sum(A1:A32)"
+      }
+    }
+  }
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}

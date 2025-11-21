@@ -1,0 +1,31 @@
+meta {
+  name: List tools copy
+  type: http
+  seq: 11
+}
+
+post {
+  url: http://192.168.1.54:8001/mcp
+  body: json
+  auth: inherit
+}
+
+headers {
+  accept: application/json,text/event-stream
+  content-type: application/json
+  mcp-session-id: 6467ec3ff79641a2890ce3e8793e4711
+}
+
+body:json {
+  {
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tools/list",
+    "params": {}
+  }
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}

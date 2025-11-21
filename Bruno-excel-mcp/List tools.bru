@@ -1,0 +1,31 @@
+meta {
+  name: List tools
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseURL}}/mcp
+  body: json
+  auth: inherit
+}
+
+headers {
+  accept: application/json,text/event-stream
+  content-type: application/json
+  mcp-session-id: {{mcp-session-id}}
+}
+
+body:json {
+  {
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tools/list",
+    "params": {}
+  }
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}
